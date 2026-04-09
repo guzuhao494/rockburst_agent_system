@@ -1,0 +1,32 @@
+[
+  {
+    "path": "plugins.allow",
+    "value": [
+      "rockburst-ops"
+    ]
+  },
+  {
+    "path": "plugins.entries.rockburst-ops.enabled",
+    "value": true
+  },
+  {
+    "path": "plugins.entries.rockburst-ops.config.baseUrl",
+    "value": "http://127.0.0.1:8000"
+  },
+  {
+    "path": "plugins.entries.rockburst-ops.config.actorName",
+    "value": "OpenClaw 值守 Agent"
+  },
+  {
+    "path": "plugins.entries.rockburst-ops.config.requestTimeoutMs",
+    "value": 15000
+  },
+  {
+    "path": "gateway.mode",
+    "value": "local"
+  },
+  {
+    "path": "gateway.bind",
+    "value": "loopback"
+  }
+]

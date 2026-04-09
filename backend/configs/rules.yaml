@@ -1,0 +1,67 @@
+min_confidence: 0.55
+
+level_boundaries:
+  L2: 35
+  L3: 65
+  L4: 85
+
+weights:
+  energy_sum: 0.40
+  peak_energy: 0.25
+  event_count: 0.15
+  magnitude: 0.15
+  confidence_penalty: 0.05
+
+thresholds:
+  default:
+    energy_sum: { L2: 8000, L3: 18000, L4: 30000 }
+    peak_energy: { L2: 2500, L3: 6000, L4: 12000 }
+    event_count: { L2: 4, L3: 8, L4: 12 }
+    magnitude: { L2: 0.8, L3: 1.5, L4: 2.2 }
+  N-101:
+    energy_sum: { L2: 7000, L3: 15000, L4: 25000 }
+    peak_energy: { L2: 2200, L3: 5200, L4: 10000 }
+    event_count: { L2: 4, L3: 7, L4: 10 }
+    magnitude: { L2: 0.7, L3: 1.4, L4: 2.0 }
+  N-205:
+    energy_sum: { L2: 9000, L3: 20000, L4: 32000 }
+    peak_energy: { L2: 2800, L3: 6500, L4: 12500 }
+    event_count: { L2: 5, L3: 9, L4: 13 }
+    magnitude: { L2: 0.9, L3: 1.6, L4: 2.3 }
+
+action_templates:
+  L2:
+    - "通知调度与安监人员，并保持 30 分钟滚动观察。"
+    - "核查当前作业活动与区域支护状态。"
+    - "将该区域加入重点巡查清单。"
+  L3:
+    - "生成现场检查工单，并要求在严格时限内回传反馈。"
+    - "复核支护参数与围岩扰动情况。"
+    - "若扰动强度持续偏高，建议调整施工节奏。"
+  L4:
+    - "生成高优先级工单，并升级至班组负责人审批。"
+    - "建议立即执行区域限行并开展现场解危评估。"
+    - "优先评估卸压与支护加固措施。"
+
+work_order_templates:
+  L3:
+    type: "现场检查"
+    priority: "high"
+    due_in_hours: 4
+    checklist:
+      - "核查支护和帮壁状态"
+      - "检查当班扰动源与作业活动"
+      - "回传现场照片与巡检记录"
+  L4:
+    type: "区域限行与解危复核"
+    priority: "critical"
+    due_in_hours: 2
+    checklist:
+      - "划定高风险边界并确认限行措施"
+      - "检查支护异常与顶帮稳定性"
+      - "评估卸压或解危作业方案"
+
+escalation_sla_minutes:
+  PendingApproval: 30
+  Approved: 20
+  Dispatched: 120

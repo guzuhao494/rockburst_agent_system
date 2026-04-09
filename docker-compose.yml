@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: rockburst-backend
+    environment:
+      APP_DB_PATH: /app/data/rockburst.db
+      APP_RULES_PATH: /app/configs/rules.yaml
+      APP_SCENARIO_DIR: /app/data/scenarios
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/configs:/app/configs:ro
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: rockburst-frontend
+    environment:
+      VITE_API_BASE_URL: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "4173:4173"
+

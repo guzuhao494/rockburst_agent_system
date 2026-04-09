@@ -1,0 +1,33 @@
+{
+  "name": "escalating_risk",
+  "description": "持续增强型风险场景。系统应从告警逐步进入待审批工单状态。",
+  "batches": [
+    {
+      "wait_ms": 250,
+      "events": [
+        { "event_id": "er-001", "ts": "2026-04-08T09:00:00", "area_id": "N-101", "energy": 1800, "magnitude": 0.72, "x": 12.0, "y": 5.1, "z": -321.0, "confidence": 0.93, "source": "simulator" },
+        { "event_id": "er-002", "ts": "2026-04-08T09:00:10", "area_id": "N-101", "energy": 2100, "magnitude": 0.81, "x": 12.4, "y": 5.0, "z": -320.5, "confidence": 0.94, "source": "simulator" },
+        { "event_id": "er-003", "ts": "2026-04-08T09:00:20", "area_id": "N-101", "energy": 2200, "magnitude": 0.83, "x": 12.7, "y": 5.4, "z": -320.8, "confidence": 0.91, "source": "simulator" },
+        { "event_id": "er-004", "ts": "2026-04-08T09:00:30", "area_id": "N-101", "energy": 2400, "magnitude": 0.88, "x": 12.9, "y": 5.5, "z": -321.1, "confidence": 0.90, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 250,
+      "events": [
+        { "event_id": "er-005", "ts": "2026-04-08T09:01:00", "area_id": "N-101", "energy": 3200, "magnitude": 1.05, "x": 13.2, "y": 5.6, "z": -320.2, "confidence": 0.95, "source": "simulator" },
+        { "event_id": "er-006", "ts": "2026-04-08T09:01:08", "area_id": "N-101", "energy": 3600, "magnitude": 1.11, "x": 13.1, "y": 5.7, "z": -319.8, "confidence": 0.94, "source": "simulator" },
+        { "event_id": "er-007", "ts": "2026-04-08T09:01:16", "area_id": "N-101", "energy": 4100, "magnitude": 1.24, "x": 13.3, "y": 5.9, "z": -320.0, "confidence": 0.93, "source": "simulator" },
+        { "event_id": "er-008", "ts": "2026-04-08T09:01:24", "area_id": "N-101", "energy": 4300, "magnitude": 1.28, "x": 13.4, "y": 5.8, "z": -320.3, "confidence": 0.92, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 250,
+      "events": [
+        { "event_id": "er-009", "ts": "2026-04-08T09:02:00", "area_id": "N-101", "energy": 5100, "magnitude": 1.42, "x": 13.6, "y": 6.0, "z": -320.7, "confidence": 0.95, "source": "simulator" },
+        { "event_id": "er-010", "ts": "2026-04-08T09:02:06", "area_id": "N-101", "energy": 5400, "magnitude": 1.55, "x": 13.8, "y": 6.1, "z": -320.1, "confidence": 0.94, "source": "simulator" },
+        { "event_id": "er-011", "ts": "2026-04-08T09:02:12", "area_id": "N-101", "energy": 6000, "magnitude": 1.61, "x": 13.9, "y": 6.3, "z": -319.7, "confidence": 0.94, "source": "simulator" },
+        { "event_id": "er-012", "ts": "2026-04-08T09:02:18", "area_id": "N-101", "energy": 6200, "magnitude": 1.67, "x": 14.0, "y": 6.4, "z": -319.5, "confidence": 0.96, "source": "simulator" }
+      ]
+    }
+  ]
+}

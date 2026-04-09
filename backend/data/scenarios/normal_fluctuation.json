@@ -1,0 +1,28 @@
+{
+  "name": "normal_fluctuation",
+  "description": "正常波动场景。系统应保持观察状态，或仅给出轻量提示。",
+  "batches": [
+    {
+      "wait_ms": 300,
+      "events": [
+        { "event_id": "nf-001", "ts": "2026-04-08T08:00:00", "area_id": "N-101", "energy": 620, "magnitude": 0.32, "x": 12.5, "y": 4.2, "z": -320.0, "confidence": 0.89, "source": "simulator" },
+        { "event_id": "nf-002", "ts": "2026-04-08T08:00:12", "area_id": "N-101", "energy": 710, "magnitude": 0.36, "x": 13.0, "y": 4.0, "z": -321.8, "confidence": 0.91, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 300,
+      "events": [
+        { "event_id": "nf-003", "ts": "2026-04-08T08:01:00", "area_id": "N-205", "energy": 980, "magnitude": 0.41, "x": 25.0, "y": 11.2, "z": -288.0, "confidence": 0.88, "source": "simulator" },
+        { "event_id": "nf-004", "ts": "2026-04-08T08:01:18", "area_id": "N-205", "energy": 1100, "magnitude": 0.48, "x": 24.6, "y": 11.6, "z": -287.2, "confidence": 0.90, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 300,
+      "events": [
+        { "event_id": "nf-005", "ts": "2026-04-08T08:02:00", "area_id": "N-101", "energy": 1450, "magnitude": 0.61, "x": 12.9, "y": 4.8, "z": -319.4, "confidence": 0.92, "source": "simulator" },
+        { "event_id": "nf-006", "ts": "2026-04-08T08:02:08", "area_id": "N-101", "energy": 900, "magnitude": 0.45, "x": 12.2, "y": 4.7, "z": -318.5, "confidence": 0.49, "source": "simulator" },
+        { "event_id": "nf-007", "ts": "2026-04-08T08:02:16", "area_id": "N-101", "energy": 1300, "magnitude": 0.55, "x": 12.7, "y": 4.5, "z": -319.9, "confidence": 0.87, "source": "simulator" }
+      ]
+    }
+  ]
+}

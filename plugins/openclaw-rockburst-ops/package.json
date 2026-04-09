@@ -1,0 +1,26 @@
+{
+  "name": "rockburst-ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    },
+    "install": {
+      "localPath": "plugins/openclaw-rockburst-ops",
+      "defaultChoice": "local"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "id": "rockburst-ops",
+  "name": "Rockburst Operations",
+  "description": "Expose the rockburst closed-loop simulation backend as OpenClaw agent tools.",
+  "version": "0.1.0",
+  "contracts": {
+    "tools": [
+      "rockburst_agent_briefing",
+      "rockburst_command_snapshot",
+      "rockburst_list_replay_scenarios",
+      "rockburst_get_rules",
+      "rockburst_list_alerts",
+      "rockburst_list_work_orders",
+      "rockburst_start_replay",
+      "rockburst_stop_replay",
+      "rockburst_decide_alert",
+      "rockburst_dispatch_work_order",
+      "rockburst_submit_feedback",
+      "rockburst_close_loop_review",
+      "rockburst_ingest_demo_batch"
+    ]
+  },
+  "skills": [
+    "./skills"
+  ],
+  "uiHints": {
+    "baseUrl": {
+      "label": "Backend Base URL",
+      "help": "FastAPI base URL for the rockburst MVP backend.",
+      "placeholder": "http://127.0.0.1:8000"
+    },
+    "actorName": {
+      "label": "Default Actor Name",
+      "help": "Used when the agent performs approvals, dispatches, or feedback without an explicit actor."
+    },
+    "requestTimeoutMs": {
+      "label": "Request Timeout (ms)",
+      "help": "Timeout for backend API requests made by the plugin.",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8000"
+      },
+      "actorName": {
+        "type": "string",
+        "default": "OpenClaw Agent"
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 60000,
+        "default": 15000
+      }
+    }
+  }
+}

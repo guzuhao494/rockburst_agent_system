@@ -1,0 +1,31 @@
+{
+  "name": "sudden_burst",
+  "description": "突发高能事件场景。系统应快速达到最高等级告警，并生成高优先级工单。",
+  "batches": [
+    {
+      "wait_ms": 200,
+      "events": [
+        { "event_id": "sb-001", "ts": "2026-04-08T10:00:00", "area_id": "N-205", "energy": 2600, "magnitude": 0.92, "x": 25.2, "y": 12.0, "z": -286.5, "confidence": 0.92, "source": "simulator" },
+        { "event_id": "sb-002", "ts": "2026-04-08T10:00:06", "area_id": "N-205", "energy": 2800, "magnitude": 0.98, "x": 25.5, "y": 12.1, "z": -286.2, "confidence": 0.93, "source": "simulator" },
+        { "event_id": "sb-003", "ts": "2026-04-08T10:00:12", "area_id": "N-205", "energy": 3100, "magnitude": 1.08, "x": 25.1, "y": 12.3, "z": -286.0, "confidence": 0.91, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 200,
+      "events": [
+        { "event_id": "sb-004", "ts": "2026-04-08T10:00:30", "area_id": "N-205", "energy": 8000, "magnitude": 1.76, "x": 25.7, "y": 12.4, "z": -285.7, "confidence": 0.96, "source": "simulator" },
+        { "event_id": "sb-005", "ts": "2026-04-08T10:00:33", "area_id": "N-205", "energy": 9200, "magnitude": 1.88, "x": 25.8, "y": 12.6, "z": -285.5, "confidence": 0.97, "source": "simulator" },
+        { "event_id": "sb-005", "ts": "2026-04-08T10:00:33", "area_id": "N-205", "energy": 9200, "magnitude": 1.88, "x": 25.8, "y": 12.6, "z": -285.5, "confidence": 0.97, "source": "simulator" },
+        { "event_id": "sb-006", "ts": "2026-04-08T10:00:36", "area_id": "N-205", "energy": 11500, "magnitude": 2.12, "x": 25.9, "y": 12.8, "z": -285.2, "confidence": 0.96, "source": "simulator" }
+      ]
+    },
+    {
+      "wait_ms": 200,
+      "events": [
+        { "event_id": "sb-007", "ts": "2026-04-08T10:00:50", "area_id": "N-205", "energy": 12400, "magnitude": 2.21, "x": 26.1, "y": 13.0, "z": -285.0, "confidence": 0.97, "source": "simulator" },
+        { "event_id": "sb-008", "ts": "2026-04-08T10:00:54", "area_id": "N-205", "energy": 13100, "magnitude": 2.34, "x": 26.2, "y": 13.1, "z": -284.7, "confidence": 0.95, "source": "simulator" },
+        { "event_id": "sb-009", "ts": "2026-04-08T10:00:58", "area_id": "N-205", "energy": 13800, "magnitude": 2.46, "x": 26.4, "y": 13.4, "z": -284.3, "confidence": 0.94, "source": "simulator" }
+      ]
+    }
+  ]
+}

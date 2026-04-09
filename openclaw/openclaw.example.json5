@@ -1,0 +1,52 @@
+{
+  env: {
+    // Use a real OpenAI API key here. Do not reuse a DashScope or proxy token as OPENAI_API_KEY.
+    OPENAI_API_KEY: "sk-..."
+  },
+  modelProviders: {
+    openai: {
+      apiKey: { env: "OPENAI_API_KEY" }
+    }
+  },
+  agents: {
+    defaults: {
+      model: {
+        // Run `openclaw models list --json` first. If api.openai.com resolves to a private/special-use IP
+        // on your network, switch this to a reachable provider-model pair instead of openai/gpt-5.4.
+        primary: "openai/gpt-5.4"
+      },
+      tools: {
+        allow: [
+          "rockburst-ops",
+          "rockburst_agent_briefing",
+          "rockburst_command_snapshot",
+          "rockburst_list_replay_scenarios",
+          "rockburst_list_alerts",
+          "rockburst_list_work_orders",
+          "rockburst_start_replay",
+          "rockburst_stop_replay",
+          "rockburst_decide_alert",
+          "rockburst_dispatch_work_order",
+          "rockburst_submit_feedback",
+          "rockburst_close_loop_review",
+          "rockburst_ingest_demo_batch"
+        ]
+      }
+    }
+  },
+  plugins: {
+    load: {
+      paths: ["C:/Users/17196/Desktop/应用于岩爆的多智能体协作系统/plugins/openclaw-rockburst-ops"]
+    },
+    entries: {
+      "rockburst-ops": {
+        enabled: true,
+        config: {
+          baseUrl: "http://127.0.0.1:8000",
+          actorName: "OpenClaw 值守 Agent",
+          requestTimeoutMs: 15000
+        }
+      }
+    }
+  }
+}
