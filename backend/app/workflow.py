@@ -15,6 +15,7 @@ from .models import (
     CaseContext,
     ExecutionFeedback,
     MicroseismicEvent,
+    ReplayStatus,
     RiskLevel,
     WorkOrder,
 )
@@ -56,6 +57,8 @@ AGENT_ORDER = [
     "effectiveness_verification",
     "supervisor_finalize",
 ]
+
+ROLE_STEP_INDEX = {role_key: index for index, role_key in enumerate(AGENT_ORDER, start=1)}
 
 
 @dataclass
@@ -191,13 +194,20 @@ class RockburstWorkflow:
         graph.add_edge(AGENT_ORDER[-1], END)
         return graph.compile()
 
-    def run_ingest_case(self, area_id: str, events: list[MicroseismicEvent]) -> CaseContext:
+    def run_ingest_case(
+        self,
+        area_id: str,
+        events: list[MicroseismicEvent],
+        *,
+        replay_context: dict[str, Any] | None = None,
+    ) -> CaseContext:
         initial_state: CaseContext = {
             "mode": "ingest",
             "area_id": area_id,
             "event_batch": events,
             "operator_decisions": {},
             "audit_logs": [],
+            "replay_progress": replay_context,
         }
         return self.graph.invoke(initial_state)
 
@@ -211,13 +221,17 @@ class RockburstWorkflow:
             "execution_feedback": feedback,
             "operator_decisions": {},
             "audit_logs": [],
+            "replay_progress": None,
         }
         return self.graph.invoke(initial_state)
 
     def _run_agent_step(self, role_key: str, state: CaseContext) -> CaseContext:
         agent = self.agents[role_key]
+        self._update_replay_role_state(role_key=role_key, state=state, phase="running_role", completed_offset=1)
         try:
-            return agent.run(state)
+            next_state = agent.run(state)
+            self._update_replay_role_state(role_key=role_key, state=state, phase="role_completed", completed_offset=0)
+            return next_state
         except WorkflowExecutionError:
             raise
         except Exception as exc:
@@ -248,6 +262,7 @@ class RockburstWorkflow:
                     payload=base_payload,
                 ),
             ]
+            self._mark_replay_failed(role_key=role_key, role_id=role_id, state=state, error_message=str(exc))
             raise WorkflowExecutionError(
                 message=(
                     f"Workflow failed in {role_id} for {state['mode']} case "
@@ -260,6 +275,60 @@ class RockburstWorkflow:
                 decision_stage=decision_stage,
                 audit_logs=[*state.get("audit_logs", []), *failed_logs],
             ) from exc
+
+    def _update_replay_role_state(
+        self,
+        *,
+        role_key: str,
+        state: CaseContext,
+        phase: str,
+        completed_offset: int,
+    ) -> None:
+        replay_context = state.get("replay_progress")
+        if not replay_context:
+            return
+        role_step = ROLE_STEP_INDEX[role_key]
+        completed_role_steps = max(role_step - completed_offset, 0)
+        role_id = getattr(self.agents[role_key], "role_id", role_key)
+        self.db.update_replay_state(
+            current_batch=replay_context.get("batch_index", 0),
+            current_area_id=state["area_id"],
+            current_mode=state["mode"],
+            current_phase=phase,
+            current_role_key=role_key,
+            current_role_id=role_id,
+            current_role_step=role_step,
+            total_role_steps=len(AGENT_ORDER),
+            completed_role_steps=completed_role_steps,
+            current_summary=f"{state['area_id']}:{role_key}",
+        )
+
+    def _mark_replay_failed(
+        self,
+        *,
+        role_key: str,
+        role_id: str,
+        state: CaseContext,
+        error_message: str,
+    ) -> None:
+        replay_context = state.get("replay_progress")
+        if not replay_context:
+            return
+        role_step = ROLE_STEP_INDEX[role_key]
+        self.db.update_replay_state(
+            status=ReplayStatus.FAILED,
+            current_batch=replay_context.get("batch_index", 0),
+            current_area_id=state["area_id"],
+            current_mode=state["mode"],
+            current_phase="failed",
+            current_role_key=role_key,
+            current_role_id=role_id,
+            current_role_step=role_step,
+            total_role_steps=len(AGENT_ORDER),
+            completed_role_steps=max(role_step - 1, 0),
+            current_summary=f"{state['area_id']}:{role_key}",
+            last_error=error_message,
+        )
 
     def _decision_stage(self, role_key: str, state: CaseContext) -> str:
         if role_key in {"supervisor", "supervisor_finalize"}:

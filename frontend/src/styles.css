@@ -270,6 +270,103 @@ button {
   gap: 0.75rem;
 }
 
+.overview-status-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 1rem;
+}
+
+.runtime-panel {
+  padding: 1rem 1.1rem;
+  background: rgba(8, 24, 35, 0.88);
+  border: 1px solid rgba(159, 196, 214, 0.12);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.runtime-panel.compact {
+  margin-top: 1rem;
+}
+
+.progress-stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.progress-meter {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(13, 39, 56, 0.9);
+  border: 1px solid rgba(159, 196, 214, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(98, 197, 224, 0.88), rgba(54, 128, 160, 0.96));
+}
+
+.replay-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.replay-role-card {
+  padding: 0.85rem 0.9rem;
+  border: 1px solid rgba(159, 196, 214, 0.12);
+  background: rgba(10, 28, 40, 0.78);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.replay-role-card.done {
+  border-color: rgba(121, 180, 199, 0.32);
+}
+
+.replay-role-card.active {
+  border-color: rgba(98, 197, 224, 0.52);
+  box-shadow: inset 0 0 0 1px rgba(98, 197, 224, 0.24);
+}
+
+.replay-role-card p,
+.briefing-card p {
+  margin: 0;
+  color: rgba(228, 238, 245, 0.74);
+  line-height: 1.5;
+}
+
+.briefing-card {
+  padding: 1rem;
+  border: 1px solid rgba(159, 196, 214, 0.12);
+  background: rgba(10, 28, 40, 0.78);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.briefing-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(159, 196, 214, 0.18);
+  background: rgba(10, 28, 40, 0.78);
+  font-size: 0.82rem;
+}
+
+.briefing-badge.high {
+  border-color: rgba(244, 173, 89, 0.38);
+}
+
+.briefing-badge.critical {
+  border-color: rgba(240, 106, 95, 0.5);
+}
+
 .demo-step {
   padding: 1rem;
   background: rgba(10, 28, 40, 0.78);
@@ -542,6 +639,10 @@ button {
   .shell,
   .detail-layout,
   .page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-status-grid {
     grid-template-columns: 1fr;
   }
 

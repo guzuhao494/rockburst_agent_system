@@ -15,7 +15,7 @@ class ReplayController:
         self,
         scenario_dir: Path,
         db: Database,
-        ingest_batch: Callable[[list[MicroseismicEvent]], Awaitable[Any]],
+        ingest_batch: Callable[..., Awaitable[Any]],
     ) -> None:
         self.scenario_dir = scenario_dir
         self.db = db
@@ -50,6 +50,16 @@ class ReplayController:
             total_batches=len(payload["batches"]),
             loop_enabled=request.loop,
             started_at=started_at,
+            current_batch=0,
+            current_area_id=None,
+            current_mode=None,
+            current_phase="waiting_batch",
+            current_role_key=None,
+            current_role_id=None,
+            current_role_step=0,
+            total_role_steps=0,
+            completed_role_steps=0,
+            current_summary="等待首批事件注入",
             last_error=None,
         )
         self._task = asyncio.create_task(self._run(payload, request))
@@ -70,6 +80,16 @@ class ReplayController:
             total_batches=current["total_batches"],
             loop_enabled=current["loop_enabled"],
             started_at=current["started_at"],
+            current_batch=current["current_batch"],
+            current_area_id=current["current_area_id"],
+            current_mode=current["current_mode"],
+            current_phase="stopped",
+            current_role_key=None,
+            current_role_id=None,
+            current_role_step=0,
+            total_role_steps=current["total_role_steps"],
+            completed_role_steps=current["completed_role_steps"],
+            current_summary="回放已停止",
             last_error=None,
         )
         return self.db.get_replay_state()
@@ -89,9 +109,34 @@ class ReplayController:
         try:
             while True:
                 for index, batch in enumerate(batches, start=1):
+                    self.db.update_replay_state(
+                        current_batch=index,
+                        current_phase="waiting_batch",
+                        current_area_id=None,
+                        current_mode="ingest",
+                        current_role_key=None,
+                        current_role_id=None,
+                        current_role_step=0,
+                        total_role_steps=0,
+                        completed_role_steps=0,
+                        current_summary=f"批次 {index} 正在等待事件注入",
+                        last_error=None,
+                    )
                     await asyncio.sleep((batch.get("wait_ms") or request.interval_ms) / 1000)
                     events = [MicroseismicEvent.model_validate(item) for item in batch["events"]]
-                    await self.ingest_batch(events)
+                    self.db.update_replay_state(
+                        current_phase="dispatching_batch",
+                        current_summary=f"批次 {index} 已注入 {len(events)} 条事件",
+                    )
+                    await self.ingest_batch(
+                        events,
+                        replay_context={
+                            "scenario_name": request.scenario_name,
+                            "batch_index": index,
+                            "total_batches": len(batches),
+                            "loop_enabled": request.loop,
+                        },
+                    )
                     self.db.set_replay_state(
                         status=ReplayStatus.RUNNING,
                         scenario_name=request.scenario_name,
@@ -99,6 +144,16 @@ class ReplayController:
                         total_batches=len(batches),
                         loop_enabled=request.loop,
                         started_at=self.db.get_replay_state()["started_at"],
+                        current_batch=index,
+                        current_area_id=None,
+                        current_mode="ingest",
+                        current_phase="batch_completed",
+                        current_role_key=None,
+                        current_role_id=None,
+                        current_role_step=0,
+                        total_role_steps=9,
+                        completed_role_steps=0,
+                        current_summary=f"批次 {index} 已完成",
                         last_error=None,
                     )
                 if not request.loop:
@@ -110,6 +165,16 @@ class ReplayController:
                 total_batches=len(batches),
                 loop_enabled=request.loop,
                 started_at=self.db.get_replay_state()["started_at"],
+                current_batch=len(batches),
+                current_area_id=None,
+                current_mode="ingest",
+                current_phase="completed",
+                current_role_key=None,
+                current_role_id=None,
+                current_role_step=0,
+                total_role_steps=0,
+                completed_role_steps=0,
+                current_summary="回放已完成",
                 last_error=None,
             )
         except asyncio.CancelledError:
@@ -120,6 +185,16 @@ class ReplayController:
                 total_batches=len(batches),
                 loop_enabled=request.loop,
                 started_at=self.db.get_replay_state()["started_at"],
+                current_batch=self.db.get_replay_state()["current_batch"],
+                current_area_id=None,
+                current_mode="ingest",
+                current_phase="stopped",
+                current_role_key=None,
+                current_role_id=None,
+                current_role_step=0,
+                total_role_steps=0,
+                completed_role_steps=0,
+                current_summary="回放已停止",
                 last_error=None,
             )
             raise
@@ -132,5 +207,15 @@ class ReplayController:
                 total_batches=len(batches),
                 loop_enabled=request.loop,
                 started_at=current["started_at"],
+                current_batch=current["current_batch"],
+                current_area_id=current["current_area_id"],
+                current_mode=current["current_mode"],
+                current_phase="failed",
+                current_role_key=current["current_role_key"],
+                current_role_id=current["current_role_id"],
+                current_role_step=current["current_role_step"],
+                total_role_steps=current["total_role_steps"],
+                completed_role_steps=current["completed_role_steps"],
+                current_summary=current["current_summary"],
                 last_error=str(exc),
             )

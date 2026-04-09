@@ -48,7 +48,7 @@ class OpenClawWorkflowClient:
         helper_path = project_root / "scripts" / "openclaw-with-proxy.ps1"
         self.helper_script = _to_windows_path(helper_path)
 
-    def run_agent(self, *, agent_id: str, message: str) -> str:
+    def run_agent(self, *, agent_id: str, message: str, session_id: str | None = None) -> str:
         command = [
             self.powershell_executable,
             "-ExecutionPolicy",
@@ -60,7 +60,7 @@ class OpenClawWorkflowClient:
             "--agent",
             agent_id,
             "--session-id",
-            f"workflow-{agent_id}-{uuid4().hex[:10]}",
+            session_id or f"workflow-{agent_id}-{uuid4().hex[:10]}",
             "--message-b64",
             base64.b64encode(message.encode("utf-8")).decode("ascii"),
             "--thinking",

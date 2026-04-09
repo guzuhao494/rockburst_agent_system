@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .agent_monitor import RockburstAgentMonitor
 from .config import AppSettings, get_settings, load_rule_config
 from .database import Database
 from .models import (
@@ -32,6 +33,7 @@ from .models import (
     RiskCurrentResponse,
     WorkOrderEnvelope,
 )
+from .openclaw_workflow_agents import OpenClawWorkflowClient
 from .replay import ReplayController
 from .risk_engine import RiskEngine
 from .time_utils import utc_now
@@ -55,15 +57,31 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    async def ingest_events(events: list[Any]) -> list[IngestCaseResult]:
+    async def ingest_events(
+        events: list[Any],
+        replay_context: dict[str, Any] | None = None,
+    ) -> list[IngestCaseResult]:
         grouped: dict[str, list[Any]] = defaultdict(list)
         for event in events:
             grouped[event.area_id].append(event)
 
         results: list[IngestCaseResult] = []
         for area_id, area_events in grouped.items():
+            if replay_context:
+                db.update_replay_state(
+                    current_batch=replay_context.get("batch_index", 0),
+                    current_area_id=area_id,
+                    current_mode="ingest",
+                    current_phase="dispatching_case",
+                    current_summary=f"{area_id} 正在进入工作流",
+                )
             try:
-                state = await asyncio.to_thread(workflow.run_ingest_case, area_id, area_events)
+                state = await asyncio.to_thread(
+                    workflow.run_ingest_case,
+                    area_id,
+                    area_events,
+                    replay_context=replay_context,
+                )
             except WorkflowExecutionError as exc:
                 _persist_audit_logs(db, exc.audit_logs)
                 raise
@@ -80,12 +98,31 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         return results
 
     replay = ReplayController(settings.scenario_dir, db, ingest_events)
+    agent_monitor = RockburstAgentMonitor(
+        db=db,
+        client=OpenClawWorkflowClient(
+            project_root=settings.project_root,
+            thinking=settings.openclaw_thinking,
+            timeout_seconds=settings.openclaw_timeout_seconds,
+        ),
+        enabled=settings.agent_monitor_enabled,
+        interval_seconds=settings.agent_monitor_interval_seconds,
+    )
 
     app.state.settings = settings
     app.state.rule_config = rule_config
     app.state.db = db
     app.state.workflow = workflow
     app.state.replay = replay
+    app.state.agent_monitor = agent_monitor
+
+    @app.on_event("startup")
+    async def startup_agent_monitor() -> None:
+        await agent_monitor.start()
+
+    @app.on_event("shutdown")
+    async def shutdown_agent_monitor() -> None:
+        await agent_monitor.stop()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -115,6 +152,10 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     @app.get("/replay/status")
     async def replay_status() -> dict[str, Any]:
         return replay.status()
+
+    @app.get("/agent/monitor/status")
+    async def agent_monitor_status() -> dict[str, Any]:
+        return agent_monitor.status()
 
     @app.get("/replay/scenarios")
     async def replay_scenarios() -> list[dict[str, Any]]:
@@ -154,6 +195,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             risk_by_area=latest_risk,
             recent_audit=db.list_audit_logs(limit=20),
             replay_status=replay.status(),
+            agent_monitor=agent_monitor.status(),
         )
 
     @app.get("/agent/briefing", response_model=AgentBriefing)
@@ -168,7 +210,13 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             "open_work_orders": sum(1 for item in work_orders if item.work_order.execution_status != ExecutionStatus.CLOSED),
             "closed_loops": sum(1 for item in alerts if item.loop_review and item.loop_review.status == ReviewStatus.CLOSED),
         }
-        return _build_agent_briefing(alerts=alerts, work_orders=work_orders, counts=counts, replay_state=replay.status())
+        return _build_agent_briefing(
+            alerts=alerts,
+            work_orders=work_orders,
+            counts=counts,
+            replay_state=replay.status(),
+            agent_monitor_state=agent_monitor.status(),
+        )
 
     @app.post("/alerts/{alert_id}/approve", response_model=AlertEnvelope)
     async def approve_alert(alert_id: str, request: DecisionRequest) -> AlertEnvelope:
@@ -351,6 +399,7 @@ def _build_agent_briefing(
     work_orders: list[WorkOrderEnvelope],
     counts: dict[str, int],
     replay_state: dict[str, Any],
+    agent_monitor_state: dict[str, Any],
 ) -> AgentBriefing:
     priorities: list[str] = []
     recommended_actions: list[RecommendedAction] = []
@@ -422,6 +471,13 @@ def _build_agent_briefing(
             )
         )
 
+    current_role_key = replay_state.get("current_role_key")
+    current_area_id = replay_state.get("current_area_id")
+    if replay_state.get("status") == "running" and current_role_key and current_area_id:
+        priorities.append(
+            f"回放正在区域 {current_area_id} 执行角色 {current_role_key}，角色进度 {replay_state.get('completed_role_steps', 0)}/{replay_state.get('total_role_steps', 0)}。"
+        )
+
     if not priorities:
         priorities.append("当前系统运行平稳，没有待审批、待派发或待关环的关键事项。")
 
@@ -432,6 +488,7 @@ def _build_agent_briefing(
         recommended_actions=recommended_actions,
         counts=counts,
         replay_status=replay_state,
+        agent_monitor=agent_monitor_state,
     )
 
 

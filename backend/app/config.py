@@ -23,6 +23,8 @@ class AppSettings:
     workflow_runtime: str
     openclaw_thinking: str
     openclaw_timeout_seconds: int
+    agent_monitor_enabled: bool
+    agent_monitor_interval_seconds: int
 
     def ensure_directories(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -48,6 +50,13 @@ def get_settings() -> AppSettings:
     workflow_runtime = os.getenv("APP_WORKFLOW_RUNTIME", "openclaw").strip().lower() or "openclaw"
     openclaw_thinking = os.getenv("APP_OPENCLAW_THINKING", "off").strip().lower() or "off"
     openclaw_timeout_seconds = int(os.getenv("APP_OPENCLAW_TIMEOUT_SECONDS", "180"))
+    agent_monitor_enabled = os.getenv("APP_AGENT_MONITOR_ENABLED", "true").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    agent_monitor_interval_seconds = int(os.getenv("APP_AGENT_MONITOR_INTERVAL_SECONDS", "20"))
     settings = AppSettings(
         project_root=PROJECT_ROOT,
         data_dir=data_dir,
@@ -59,6 +68,8 @@ def get_settings() -> AppSettings:
         workflow_runtime=workflow_runtime,
         openclaw_thinking=openclaw_thinking,
         openclaw_timeout_seconds=openclaw_timeout_seconds,
+        agent_monitor_enabled=agent_monitor_enabled,
+        agent_monitor_interval_seconds=agent_monitor_interval_seconds,
     )
     settings.ensure_directories()
     return settings

@@ -17,6 +17,7 @@ import {
 } from "./api";
 import type {
   AlertEnvelope,
+  AgentMonitorState,
   DashboardSummary,
   ReplayState,
   RuleConfigResponse,
@@ -25,6 +26,16 @@ import type {
 } from "./types";
 
 type PageKey = "overview" | "alerts" | "workorders" | "rules";
+type ReplayRoleKey =
+  | "supervisor"
+  | "ingest_intake"
+  | "data_quality"
+  | "risk_assessment"
+  | "alert_explanation"
+  | "action_planning"
+  | "work_order_coordination"
+  | "effectiveness_verification"
+  | "supervisor_finalize";
 
 type LoopStageKey =
   | "Observed"
@@ -86,6 +97,38 @@ const REPLAY_STATUS_LABELS: Record<string, string> = {
   failed: "失败",
 };
 
+const MONITOR_STATUS_LABELS: Record<string, string> = {
+  idle: "未启动",
+  monitoring: "监测中",
+  attention: "已发现关键事项",
+  error: "监测异常",
+};
+
+const REPLAY_PHASE_LABELS: Record<string, string> = {
+  idle: "空闲",
+  waiting_batch: "等待批次注入",
+  dispatching_batch: "注入批次事件",
+  dispatching_case: "准备进入当前区域",
+  running_role: "执行角色中",
+  role_completed: "角色已完成",
+  batch_completed: "批次已完成",
+  completed: "回放已完成",
+  stopped: "回放已停止",
+  failed: "回放失败",
+};
+
+const REPLAY_ROLE_FLOW: Array<{ key: ReplayRoleKey; label: string; helper: string }> = [
+  { key: "supervisor", label: "监督编排", helper: "确认本轮工作流开始执行。" },
+  { key: "ingest_intake", label: "采集接入", helper: "整理当前批次事件并形成输入。" },
+  { key: "data_quality", label: "数据质检", helper: "过滤低置信度和异常事件。" },
+  { key: "risk_assessment", label: "风险评估", helper: "生成风险快照与等级判断。" },
+  { key: "alert_explanation", label: "告警解释", helper: "决定是否生成告警并给出解释。" },
+  { key: "action_planning", label: "处置规划", helper: "为高等级风险起草处置工单。" },
+  { key: "work_order_coordination", label: "工单协调", helper: "落库工单或保留观察态。" },
+  { key: "effectiveness_verification", label: "效果验证", helper: "在 review 模式下复核执行反馈。" },
+  { key: "supervisor_finalize", label: "监督收尾", helper: "结束本轮工作流并写入审计。" },
+];
+
 const PRIORITY_LABELS: Record<string, string> = {
   low: "低",
   medium: "中",
@@ -117,6 +160,7 @@ const AUDIT_ACTOR_LABELS: Record<string, string> = {
   WorkOrderCoordinationAgent: "工单协调 Agent",
   EffectivenessVerificationAgent: "效果验证 Agent",
   "dispatcher-01": "调度员 dispatcher-01",
+  rockburst: "OpenClaw 外层值守 Agent",
 };
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
@@ -126,6 +170,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   work_order: "工单",
   loop_review: "复核",
   tool: "工具",
+  agent_monitor: "自动监测",
 };
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -146,6 +191,10 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   loop_review_completed: "复核已完成",
   loop_closed: "闭环已关闭",
   tool_completed: "工具调用完成",
+  work_order_persisted: "工单已入库",
+  agent_decision_failed: "角色决策失败",
+  workflow_failed: "工作流失败",
+  auto_briefing_published: "自动简报已发布",
 };
 
 const REVIEW_EFFECTIVENESS_LABELS: Record<string, string> = {
@@ -206,9 +255,12 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [actionLabel, setActionLabel] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const agentMonitor = dashboard?.agent_monitor ?? null;
   const replayFailureMessage =
     replayStatus?.status === "failed" && replayStatus.last_error ? `回放失败：${replayStatus.last_error}` : null;
-  const effectiveError = error ?? replayFailureMessage;
+  const monitorFailureMessage =
+    agentMonitor?.status === "error" && agentMonitor.last_error ? `自动监测异常：${agentMonitor.last_error}` : null;
+  const effectiveError = error ?? replayFailureMessage ?? monitorFailureMessage;
 
   const refresh = useCallback(
     async (silent = false) => {
@@ -370,6 +422,14 @@ export default function App() {
             <span>回放状态</span>
             <strong>{labelReplayStatus(replayStatus?.status)}</strong>
           </div>
+          <div className="status-row">
+            <span>当前角色</span>
+            <strong>{formatReplayRoleLabel(replayStatus?.current_role_key) ?? "等待中"}</strong>
+          </div>
+          <div className="status-row">
+            <span>自动简报</span>
+            <strong>{labelMonitorStatus(agentMonitor?.status)}</strong>
+          </div>
         </div>
       </aside>
 
@@ -384,6 +444,11 @@ export default function App() {
             <StatusChip label="待审批" value={`${dashboard?.counts.pending_approval ?? 0}`} tone="warning" />
             <StatusChip label="待处理工单" value={`${dashboard?.counts.open_work_orders ?? 0}`} tone="info" />
             <StatusChip
+              label="当前角色"
+              value={formatReplayRoleLabel(replayStatus?.current_role_key) ?? "等待中"}
+              tone={replayStatus?.status === "running" ? "info" : "neutral"}
+            />
+            <StatusChip
               label="回放"
               value={
                 replayStatus?.scenario_name
@@ -391,6 +456,11 @@ export default function App() {
                   : "空闲"
               }
               tone={replayStatus?.status === "running" ? "info" : replayStatus?.status === "failed" ? "warning" : "neutral"}
+            />
+            <StatusChip
+              label="自动简报"
+              value={labelMonitorStatus(agentMonitor?.status)}
+              tone={agentMonitor?.status === "attention" ? "warning" : agentMonitor?.status === "error" ? "warning" : "neutral"}
             />
           </div>
         </header>
@@ -404,6 +474,7 @@ export default function App() {
             alerts={alerts}
             workOrders={workOrders}
             replayStatus={replayStatus}
+            agentMonitor={agentMonitor}
             busy={Boolean(actionLabel)}
             onNavigate={setPage}
             onStartReplay={handleStartReplay}
@@ -449,6 +520,7 @@ export default function App() {
           <RulesPage
             rules={rules}
             replayStatus={replayStatus}
+            agentMonitor={agentMonitor}
             scenarios={scenarios}
             onStartReplay={handleStartReplay}
             onStopReplay={handleStopReplay}
@@ -465,12 +537,13 @@ function OverviewPage(props: {
   alerts: AlertEnvelope[];
   workOrders: WorkOrderEnvelope[];
   replayStatus: ReplayState | null;
+  agentMonitor: AgentMonitorState | null;
   busy: boolean;
   onNavigate: (page: PageKey) => void;
   onStartReplay: (scenarioName: string) => void;
   onStopReplay: () => void;
 }) {
-  const { dashboard, alerts, workOrders, replayStatus, busy, onNavigate, onStartReplay, onStopReplay } = props;
+  const { dashboard, alerts, workOrders, replayStatus, agentMonitor, busy, onNavigate, onStartReplay, onStopReplay } = props;
 
   const loopStageCounts: Record<LoopStageKey, number> = {
     Observed: dashboard?.counts.areas ?? 0,
@@ -517,6 +590,10 @@ function OverviewPage(props: {
           <Metric label="监测区域" value={`${dashboard?.counts.areas ?? 0}`} />
           <Metric label="活动告警" value={`${dashboard?.counts.active_alerts ?? 0}`} />
           <Metric label="已关环" value={`${dashboard?.counts.closed_loops ?? 0}`} />
+        </div>
+        <div className="overview-status-grid">
+          <ReplayProgressPanel replayStatus={replayStatus} />
+          <MonitorBriefingPanel agentMonitor={agentMonitor} />
         </div>
         <div className="demo-flow">
           <article className="demo-step">
@@ -643,6 +720,112 @@ function OverviewPage(props: {
           {!dashboard?.recent_audit.length ? <EmptyState text="暂时还没有审计记录。" /> : null}
         </div>
       </section>
+    </div>
+  );
+}
+
+function ReplayProgressPanel({
+  replayStatus,
+  compact = false,
+}: {
+  replayStatus: ReplayState | null;
+  compact?: boolean;
+}) {
+  const batchPercent = getProgressPercent(getDisplayedBatchStep(replayStatus), replayStatus?.total_batches ?? 0);
+  const rolePercent = getProgressPercent(getDisplayedRoleStep(replayStatus), replayStatus?.total_role_steps ?? 0);
+  const activeRoleStep = replayStatus?.current_role_step ?? 0;
+
+  return (
+    <section className={`runtime-panel ${compact ? "compact" : ""}`}>
+      <div className="row-topline">
+        <div>
+          <p className="eyebrow">回放执行跟踪</p>
+          <h3>当前正在执行哪个角色</h3>
+        </div>
+        <span className="muted">{labelReplayPhase(replayStatus?.current_phase)}</span>
+      </div>
+      <div className="detail-grid">
+        <DetailBox label="场景" value={replayStatus?.scenario_name ? formatScenarioName(replayStatus.scenario_name) : "未启动"} />
+        <DetailBox label="状态" value={labelReplayStatus(replayStatus?.status)} />
+        <DetailBox label="当前批次" value={replayStatus?.current_batch ? `${replayStatus.current_batch}` : "-"} />
+        <DetailBox label="当前区域" value={replayStatus?.current_area_id ?? "等待中"} />
+        <DetailBox label="当前角色" value={formatReplayRoleLabel(replayStatus?.current_role_key) ?? "等待中"} />
+        <DetailBox label="角色进度" value={formatRoleProgress(replayStatus)} />
+      </div>
+      <div className="progress-stack">
+        <ProgressMeter label="批次进度" value={formatBatchProgress(replayStatus)} percent={batchPercent} />
+        <ProgressMeter label="角色进度" value={formatRoleProgress(replayStatus)} percent={rolePercent} />
+      </div>
+      <div className="replay-role-grid">
+        {REPLAY_ROLE_FLOW.map((role, index) => {
+          const step = index + 1;
+          const isDone = (replayStatus?.completed_role_steps ?? 0) >= step;
+          const isActive = replayStatus?.status === "running" && activeRoleStep === step;
+          return (
+            <article
+              key={role.key}
+              className={`replay-role-card ${isDone ? "done" : ""} ${isActive ? "active" : ""}`}
+            >
+              <div className="row-topline">
+                <strong>{role.label}</strong>
+                <span className="state-count">{step}</span>
+              </div>
+              <p>{role.helper}</p>
+            </article>
+          );
+        })}
+      </div>
+      {replayStatus?.current_summary ? <p className="state-machine-note">{replayStatus.current_summary}</p> : null}
+    </section>
+  );
+}
+
+function MonitorBriefingPanel({ agentMonitor }: { agentMonitor: AgentMonitorState | null }) {
+  return (
+    <section className="runtime-panel">
+      <div className="row-topline">
+        <div>
+          <p className="eyebrow">OpenClaw 自动简报</p>
+          <h3>外层 rockburst 值守</h3>
+        </div>
+        <span className={`briefing-badge ${agentMonitor?.latest_priority ?? "normal"}`}>
+          {labelMonitorStatus(agentMonitor?.status)}
+        </span>
+      </div>
+      <div className="detail-grid">
+        <DetailBox label="轮询周期" value={agentMonitor ? `${agentMonitor.poll_interval_seconds} 秒` : "-"} />
+        <DetailBox label="最近检查" value={agentMonitor?.last_checked_at ? formatTime(agentMonitor.last_checked_at) : "-"} />
+        <DetailBox label="最近简报" value={agentMonitor?.last_briefing_at ? formatTime(agentMonitor.last_briefing_at) : "尚未生成"} />
+        <DetailBox label="会话" value={agentMonitor?.session_id ?? "rockburst-monitor"} />
+      </div>
+      {agentMonitor?.latest_headline ? (
+        <div className="briefing-card">
+          <div className="row-topline">
+            <strong>{agentMonitor.latest_headline}</strong>
+            <span className={`briefing-badge ${agentMonitor.latest_priority ?? "normal"}`}>
+              {labelBriefingPriority(agentMonitor.latest_priority)}
+            </span>
+          </div>
+          <p>{agentMonitor.latest_summary}</p>
+        </div>
+      ) : (
+        <EmptyState text="值守监测已经启动，关键事项一出现就会在这里生成最新简报。" />
+      )}
+      {agentMonitor?.last_error ? <p className="muted">最近异常: {agentMonitor.last_error}</p> : null}
+    </section>
+  );
+}
+
+function ProgressMeter({ label, value, percent }: { label: string; value: string; percent: number }) {
+  return (
+    <div className="progress-meter">
+      <div className="row-topline">
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <div className="progress-bar" aria-hidden="true">
+        <div className="progress-fill" style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }
@@ -921,12 +1104,13 @@ function WorkOrdersPage(props: {
 function RulesPage(props: {
   rules: RuleConfigResponse | null;
   replayStatus: ReplayState | null;
+  agentMonitor: AgentMonitorState | null;
   scenarios: ScenarioMetadata[];
   onStartReplay: (scenarioName: string) => void;
   onStopReplay: () => void;
   busy: boolean;
 }) {
-  const { rules, replayStatus, scenarios, onStartReplay, onStopReplay, busy } = props;
+  const { rules, replayStatus, agentMonitor, scenarios, onStartReplay, onStopReplay, busy } = props;
 
   return (
     <div className="page-grid">
@@ -943,9 +1127,15 @@ function RulesPage(props: {
         <div className="detail-grid">
           <DetailBox label="场景" value={replayStatus?.scenario_name ? formatScenarioName(replayStatus.scenario_name) : "未启动"} />
           <DetailBox label="状态" value={labelReplayStatus(replayStatus?.status)} />
-          <DetailBox label="进度" value={replayStatus?.total_batches ? `${replayStatus.progress}/${replayStatus.total_batches}` : "0/0"} />
+          <DetailBox label="批次进度" value={formatBatchProgress(replayStatus)} />
+          <DetailBox label="角色进度" value={formatRoleProgress(replayStatus)} />
+          <DetailBox label="当前角色" value={formatReplayRoleLabel(replayStatus?.current_role_key) ?? "等待中"} />
+          <DetailBox label="当前区域" value={replayStatus?.current_area_id ?? "等待中"} />
+          <DetailBox label="阶段" value={labelReplayPhase(replayStatus?.current_phase)} />
+          <DetailBox label="自动简报" value={labelMonitorStatus(agentMonitor?.status)} />
           <DetailBox label="更新时间" value={replayStatus?.updated_at ? formatTime(replayStatus.updated_at) : "-"} />
         </div>
+        <ReplayProgressPanel replayStatus={replayStatus} compact />
         <div className="scenario-list">
           {scenarios.map((scenario) => (
             <article key={scenario.name} className="scenario-item">
@@ -1073,6 +1263,55 @@ function labelReplayStatus(status?: string | null) {
   return REPLAY_STATUS_LABELS[status] ?? status;
 }
 
+function labelMonitorStatus(status?: string | null) {
+  if (!status) {
+    return MONITOR_STATUS_LABELS.idle;
+  }
+  return MONITOR_STATUS_LABELS[status] ?? status;
+}
+
+function labelReplayPhase(phase?: string | null) {
+  if (!phase) {
+    return REPLAY_PHASE_LABELS.idle;
+  }
+  return REPLAY_PHASE_LABELS[phase] ?? phase;
+}
+
+function formatReplayRoleLabel(roleKey?: string | null) {
+  if (!roleKey) {
+    return null;
+  }
+  return REPLAY_ROLE_FLOW.find((item) => item.key === roleKey)?.label ?? roleKey;
+}
+
+function formatBatchProgress(replayStatus?: ReplayState | null) {
+  if (!replayStatus?.total_batches) {
+    return "0/0";
+  }
+  const current = getDisplayedBatchStep(replayStatus);
+  return `${Math.min(current, replayStatus.total_batches)}/${replayStatus.total_batches}`;
+}
+
+function formatRoleProgress(replayStatus?: ReplayState | null) {
+  if (!replayStatus?.total_role_steps) {
+    return "0/0";
+  }
+  return `${getDisplayedRoleStep(replayStatus)}/${replayStatus.total_role_steps}`;
+}
+
+function labelBriefingPriority(priority?: string | null) {
+  if (!priority) {
+    return "一般";
+  }
+  if (priority === "critical") {
+    return "紧急";
+  }
+  if (priority === "high") {
+    return "关注";
+  }
+  return "一般";
+}
+
 function labelPriority(priority?: string | null) {
   if (!priority) {
     return "未设置";
@@ -1140,6 +1379,29 @@ function getLoopFocusStage(counts: Record<LoopStageKey, number>, replayStatus?: 
 
 function formatScenarioName(name: string) {
   return SCENARIO_LABELS[name] ?? name;
+}
+
+function getProgressPercent(current: number, total: number) {
+  if (!total) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, (current / total) * 100));
+}
+
+function getDisplayedRoleStep(replayStatus?: ReplayState | null) {
+  if (!replayStatus) {
+    return 0;
+  }
+  return Math.max(replayStatus.completed_role_steps, replayStatus.current_role_step);
+}
+
+function getDisplayedBatchStep(replayStatus?: ReplayState | null) {
+  if (!replayStatus) {
+    return 0;
+  }
+  return replayStatus.status === "running"
+    ? Math.max(replayStatus.current_batch, replayStatus.progress)
+    : replayStatus.progress;
 }
 
 function formatTime(value: string) {

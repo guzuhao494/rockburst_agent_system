@@ -61,6 +61,13 @@ class ReplayStatus(str, Enum):
     FAILED = "failed"
 
 
+class AgentMonitorStatus(str, Enum):
+    IDLE = "idle"
+    MONITORING = "monitoring"
+    ATTENTION = "attention"
+    ERROR = "error"
+
+
 class MicroseismicEvent(BaseModel):
     event_id: str
     ts: datetime
@@ -200,6 +207,7 @@ class DashboardSummary(BaseModel):
     risk_by_area: list[RiskSnapshot]
     recent_audit: list[AuditLog]
     replay_status: dict[str, Any]
+    agent_monitor: dict[str, Any] = Field(default_factory=dict)
 
 
 class RecommendedAction(BaseModel):
@@ -217,6 +225,7 @@ class AgentBriefing(BaseModel):
     recommended_actions: list[RecommendedAction] = Field(default_factory=list)
     counts: dict[str, int] = Field(default_factory=dict)
     replay_status: dict[str, Any] = Field(default_factory=dict)
+    agent_monitor: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScenarioMetadata(BaseModel):
@@ -261,3 +270,4 @@ class CaseContext(TypedDict, total=False):
     execution_feedback: ExecutionFeedback | None
     loop_review: LoopReview | None
     audit_logs: list[AuditLog]
+    replay_progress: dict[str, Any] | None

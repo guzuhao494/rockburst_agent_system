@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .models import (
+    AgentMonitorStatus,
     Alert,
     AlertEnvelope,
     AuditLog,
@@ -154,6 +155,32 @@ class Database:
                     loop_enabled INTEGER NOT NULL,
                     started_at TEXT,
                     last_error TEXT,
+                    current_batch INTEGER NOT NULL DEFAULT 0,
+                    current_area_id TEXT,
+                    current_mode TEXT,
+                    current_phase TEXT NOT NULL DEFAULT 'idle',
+                    current_role_key TEXT,
+                    current_role_id TEXT,
+                    current_role_step INTEGER NOT NULL DEFAULT 0,
+                    total_role_steps INTEGER NOT NULL DEFAULT 0,
+                    completed_role_steps INTEGER NOT NULL DEFAULT 0,
+                    current_summary TEXT,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS agent_monitor_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    enabled INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    poll_interval_seconds INTEGER NOT NULL,
+                    last_checked_at TEXT,
+                    last_briefing_at TEXT,
+                    latest_headline TEXT,
+                    latest_summary TEXT,
+                    latest_priority TEXT,
+                    last_trigger_signature TEXT,
+                    last_error TEXT,
                     updated_at TEXT NOT NULL
                 );
                 """
@@ -161,15 +188,44 @@ class Database:
             replay_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(replay_state)").fetchall()
             }
-            if "last_error" not in replay_columns:
-                conn.execute("ALTER TABLE replay_state ADD COLUMN last_error TEXT")
+            replay_migrations = {
+                "last_error": "ALTER TABLE replay_state ADD COLUMN last_error TEXT",
+                "current_batch": "ALTER TABLE replay_state ADD COLUMN current_batch INTEGER NOT NULL DEFAULT 0",
+                "current_area_id": "ALTER TABLE replay_state ADD COLUMN current_area_id TEXT",
+                "current_mode": "ALTER TABLE replay_state ADD COLUMN current_mode TEXT",
+                "current_phase": "ALTER TABLE replay_state ADD COLUMN current_phase TEXT NOT NULL DEFAULT 'idle'",
+                "current_role_key": "ALTER TABLE replay_state ADD COLUMN current_role_key TEXT",
+                "current_role_id": "ALTER TABLE replay_state ADD COLUMN current_role_id TEXT",
+                "current_role_step": "ALTER TABLE replay_state ADD COLUMN current_role_step INTEGER NOT NULL DEFAULT 0",
+                "total_role_steps": "ALTER TABLE replay_state ADD COLUMN total_role_steps INTEGER NOT NULL DEFAULT 0",
+                "completed_role_steps": "ALTER TABLE replay_state ADD COLUMN completed_role_steps INTEGER NOT NULL DEFAULT 0",
+                "current_summary": "ALTER TABLE replay_state ADD COLUMN current_summary TEXT",
+            }
+            for column_name, statement in replay_migrations.items():
+                if column_name not in replay_columns:
+                    conn.execute(statement)
             conn.execute(
                 """
-                INSERT INTO replay_state (id, scenario_name, status, progress, total_batches, loop_enabled, started_at, last_error, updated_at)
-                VALUES (1, NULL, ?, 0, 0, 0, NULL, NULL, ?)
+                INSERT INTO replay_state (
+                    id, scenario_name, status, progress, total_batches, loop_enabled, started_at, last_error,
+                    current_batch, current_area_id, current_mode, current_phase, current_role_key, current_role_id,
+                    current_role_step, total_role_steps, completed_role_steps, current_summary, updated_at
+                )
+                VALUES (1, NULL, ?, 0, 0, 0, NULL, NULL, 0, NULL, NULL, 'idle', NULL, NULL, 0, 0, 0, NULL, ?)
                 ON CONFLICT(id) DO NOTHING
                 """,
                 (ReplayStatus.IDLE.value, _utcnow().isoformat()),
+            )
+            conn.execute(
+                """
+                INSERT INTO agent_monitor_state (
+                    id, enabled, status, session_id, poll_interval_seconds, last_checked_at, last_briefing_at,
+                    latest_headline, latest_summary, latest_priority, last_trigger_signature, last_error, updated_at
+                )
+                VALUES (1, 0, ?, 'rockburst-monitor', 20, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+                ON CONFLICT(id) DO NOTHING
+                """,
+                (AgentMonitorStatus.IDLE.value, _utcnow().isoformat()),
             )
 
     def upsert_event(self, event: dict[str, Any], quality_status: str, quality_notes: str = "") -> None:
@@ -508,13 +564,26 @@ class Database:
         total_batches: int,
         loop_enabled: bool,
         started_at: str | None,
+        current_batch: int = 0,
+        current_area_id: str | None = None,
+        current_mode: str | None = None,
+        current_phase: str = "idle",
+        current_role_key: str | None = None,
+        current_role_id: str | None = None,
+        current_role_step: int = 0,
+        total_role_steps: int = 0,
+        completed_role_steps: int = 0,
+        current_summary: str | None = None,
         last_error: str | None = None,
     ) -> None:
         with self.connection() as conn:
             conn.execute(
                 """
                 UPDATE replay_state
-                SET scenario_name = ?, status = ?, progress = ?, total_batches = ?, loop_enabled = ?, started_at = ?, last_error = ?, updated_at = ?
+                SET scenario_name = ?, status = ?, progress = ?, total_batches = ?, loop_enabled = ?, started_at = ?, last_error = ?,
+                    current_batch = ?, current_area_id = ?, current_mode = ?, current_phase = ?, current_role_key = ?,
+                    current_role_id = ?, current_role_step = ?, total_role_steps = ?, completed_role_steps = ?,
+                    current_summary = ?, updated_at = ?
                 WHERE id = 1
                 """,
                 (
@@ -525,9 +594,46 @@ class Database:
                     1 if loop_enabled else 0,
                     started_at,
                     last_error,
+                    current_batch,
+                    current_area_id,
+                    current_mode,
+                    current_phase,
+                    current_role_key,
+                    current_role_id,
+                    current_role_step,
+                    total_role_steps,
+                    completed_role_steps,
+                    current_summary,
                     _utcnow().isoformat(),
                 ),
             )
+
+    def update_replay_state(self, **updates: Any) -> None:
+        current = self.get_replay_state()
+        status_value = updates.pop("status", current["status"])
+        status = status_value if isinstance(status_value, ReplayStatus) else ReplayStatus(status_value)
+        merged = {
+            "scenario_name": updates.pop("scenario_name", current["scenario_name"]),
+            "progress": updates.pop("progress", current["progress"]),
+            "total_batches": updates.pop("total_batches", current["total_batches"]),
+            "loop_enabled": updates.pop("loop_enabled", current["loop_enabled"]),
+            "started_at": updates.pop("started_at", current["started_at"]),
+            "current_batch": updates.pop("current_batch", current["current_batch"]),
+            "current_area_id": updates.pop("current_area_id", current["current_area_id"]),
+            "current_mode": updates.pop("current_mode", current["current_mode"]),
+            "current_phase": updates.pop("current_phase", current["current_phase"]),
+            "current_role_key": updates.pop("current_role_key", current["current_role_key"]),
+            "current_role_id": updates.pop("current_role_id", current["current_role_id"]),
+            "current_role_step": updates.pop("current_role_step", current["current_role_step"]),
+            "total_role_steps": updates.pop("total_role_steps", current["total_role_steps"]),
+            "completed_role_steps": updates.pop("completed_role_steps", current["completed_role_steps"]),
+            "current_summary": updates.pop("current_summary", current["current_summary"]),
+            "last_error": updates.pop("last_error", current["last_error"]),
+        }
+        if updates:
+            unknown = ", ".join(sorted(updates))
+            raise KeyError(f"Unknown replay state update fields: {unknown}")
+        self.set_replay_state(status=status, **merged)
 
     def get_replay_state(self) -> dict[str, Any]:
         with self.connection() as conn:
@@ -540,6 +646,96 @@ class Database:
                 "total_batches": row["total_batches"],
                 "loop_enabled": bool(row["loop_enabled"]),
                 "started_at": row["started_at"],
+                "last_error": row["last_error"],
+                "current_batch": row["current_batch"],
+                "current_area_id": row["current_area_id"],
+                "current_mode": row["current_mode"],
+                "current_phase": row["current_phase"],
+                "current_role_key": row["current_role_key"],
+                "current_role_id": row["current_role_id"],
+                "current_role_step": row["current_role_step"],
+                "total_role_steps": row["total_role_steps"],
+                "completed_role_steps": row["completed_role_steps"],
+                "current_summary": row["current_summary"],
+                "updated_at": row["updated_at"],
+            }
+
+    def set_agent_monitor_state(
+        self,
+        *,
+        enabled: bool,
+        status: AgentMonitorStatus,
+        session_id: str,
+        poll_interval_seconds: int,
+        last_checked_at: str | None = None,
+        last_briefing_at: str | None = None,
+        latest_headline: str | None = None,
+        latest_summary: str | None = None,
+        latest_priority: str | None = None,
+        last_trigger_signature: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        with self.connection() as conn:
+            conn.execute(
+                """
+                UPDATE agent_monitor_state
+                SET enabled = ?, status = ?, session_id = ?, poll_interval_seconds = ?, last_checked_at = ?,
+                    last_briefing_at = ?, latest_headline = ?, latest_summary = ?, latest_priority = ?,
+                    last_trigger_signature = ?, last_error = ?, updated_at = ?
+                WHERE id = 1
+                """,
+                (
+                    1 if enabled else 0,
+                    status.value,
+                    session_id,
+                    poll_interval_seconds,
+                    last_checked_at,
+                    last_briefing_at,
+                    latest_headline,
+                    latest_summary,
+                    latest_priority,
+                    last_trigger_signature,
+                    last_error,
+                    _utcnow().isoformat(),
+                ),
+            )
+
+    def update_agent_monitor_state(self, **updates: Any) -> None:
+        current = self.get_agent_monitor_state()
+        status_value = updates.pop("status", current["status"])
+        status = status_value if isinstance(status_value, AgentMonitorStatus) else AgentMonitorStatus(status_value)
+        merged = {
+            "enabled": updates.pop("enabled", current["enabled"]),
+            "session_id": updates.pop("session_id", current["session_id"]),
+            "poll_interval_seconds": updates.pop("poll_interval_seconds", current["poll_interval_seconds"]),
+            "last_checked_at": updates.pop("last_checked_at", current["last_checked_at"]),
+            "last_briefing_at": updates.pop("last_briefing_at", current["last_briefing_at"]),
+            "latest_headline": updates.pop("latest_headline", current["latest_headline"]),
+            "latest_summary": updates.pop("latest_summary", current["latest_summary"]),
+            "latest_priority": updates.pop("latest_priority", current["latest_priority"]),
+            "last_trigger_signature": updates.pop("last_trigger_signature", current["last_trigger_signature"]),
+            "last_error": updates.pop("last_error", current["last_error"]),
+        }
+        if updates:
+            unknown = ", ".join(sorted(updates))
+            raise KeyError(f"Unknown agent monitor state update fields: {unknown}")
+        self.set_agent_monitor_state(status=status, **merged)
+
+    def get_agent_monitor_state(self) -> dict[str, Any]:
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM agent_monitor_state WHERE id = 1").fetchone()
+            assert row is not None
+            return {
+                "enabled": bool(row["enabled"]),
+                "status": row["status"],
+                "session_id": row["session_id"],
+                "poll_interval_seconds": row["poll_interval_seconds"],
+                "last_checked_at": row["last_checked_at"],
+                "last_briefing_at": row["last_briefing_at"],
+                "latest_headline": row["latest_headline"],
+                "latest_summary": row["latest_summary"],
+                "latest_priority": row["latest_priority"],
+                "last_trigger_signature": row["last_trigger_signature"],
                 "last_error": row["last_error"],
                 "updated_at": row["updated_at"],
             }

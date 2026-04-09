@@ -106,6 +106,7 @@ export interface DashboardSummary {
   risk_by_area: RiskSnapshot[];
   recent_audit: AuditLog[];
   replay_status: ReplayState;
+  agent_monitor: AgentMonitorState;
 }
 
 export interface ReplayState {
@@ -115,6 +116,31 @@ export interface ReplayState {
   total_batches: number;
   loop_enabled: boolean;
   started_at: string | null;
+  last_error: string | null;
+  current_batch: number;
+  current_area_id: string | null;
+  current_mode: string | null;
+  current_phase: string;
+  current_role_key: string | null;
+  current_role_id: string | null;
+  current_role_step: number;
+  total_role_steps: number;
+  completed_role_steps: number;
+  current_summary: string | null;
+  updated_at: string;
+}
+
+export interface AgentMonitorState {
+  enabled: boolean;
+  status: "idle" | "monitoring" | "attention" | "error";
+  session_id: string;
+  poll_interval_seconds: number;
+  last_checked_at: string | null;
+  last_briefing_at: string | null;
+  latest_headline: string | null;
+  latest_summary: string | null;
+  latest_priority: "normal" | "high" | "critical" | null;
+  last_trigger_signature: string | null;
   last_error: string | null;
   updated_at: string;
 }

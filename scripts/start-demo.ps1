@@ -69,6 +69,8 @@ $FrontendDir = Join-Path $RepoRoot "frontend"
 $WorkflowRuntime = if ($env:APP_WORKFLOW_RUNTIME) { $env:APP_WORKFLOW_RUNTIME } else { "openclaw" }
 $OpenClawThinking = if ($env:APP_OPENCLAW_THINKING) { $env:APP_OPENCLAW_THINKING } else { "off" }
 $OpenClawTimeoutSeconds = if ($env:APP_OPENCLAW_TIMEOUT_SECONDS) { $env:APP_OPENCLAW_TIMEOUT_SECONDS } else { "180" }
+$AgentMonitorEnabled = if ($env:APP_AGENT_MONITOR_ENABLED) { $env:APP_AGENT_MONITOR_ENABLED } else { "true" }
+$AgentMonitorIntervalSeconds = if ($env:APP_AGENT_MONITOR_INTERVAL_SECONDS) { $env:APP_AGENT_MONITOR_INTERVAL_SECONDS } else { "20" }
 
 $BackendHealthUrl = "http://127.0.0.1:8000/health"
 $FrontendUrl = "http://127.0.0.1:4173"
@@ -109,8 +111,8 @@ else {
     $BackendWslDir = Convert-ToWslPath -Path $BackendDir
     $BackendLogWsl = Convert-ToWslPath -Path $BackendLogPath
     $BackendPidWsl = Convert-ToWslPath -Path $BackendPidPath
-    $BackendCommand = "set -euo pipefail; rm -f '{1}' '{2}'; cd '{0}'; export APP_WORKFLOW_RUNTIME='{3}'; export APP_OPENCLAW_THINKING='{4}'; export APP_OPENCLAW_TIMEOUT_SECONDS='{5}'; . .venv/bin/activate; nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > '{1}' 2>&1 < /dev/null & backend_pid=`$!; echo `$backend_pid > '{2}'; sleep 2"
-    $BackendCommand = $BackendCommand -f $BackendWslDir, $BackendLogWsl, $BackendPidWsl, $WorkflowRuntime, $OpenClawThinking, $OpenClawTimeoutSeconds
+    $BackendCommand = "set -euo pipefail; rm -f '{1}' '{2}'; cd '{0}'; export APP_WORKFLOW_RUNTIME='{3}'; export APP_OPENCLAW_THINKING='{4}'; export APP_OPENCLAW_TIMEOUT_SECONDS='{5}'; export APP_AGENT_MONITOR_ENABLED='{6}'; export APP_AGENT_MONITOR_INTERVAL_SECONDS='{7}'; . .venv/bin/activate; nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > '{1}' 2>&1 < /dev/null & backend_pid=`$!; echo `$backend_pid > '{2}'; sleep 2"
+    $BackendCommand = $BackendCommand -f $BackendWslDir, $BackendLogWsl, $BackendPidWsl, $WorkflowRuntime, $OpenClawThinking, $OpenClawTimeoutSeconds, $AgentMonitorEnabled, $AgentMonitorIntervalSeconds
     & wsl -e bash -lc $BackendCommand | Out-Null
 
     if (-not (Wait-ForUrl -Url $BackendHealthUrl)) {
